@@ -150,7 +150,7 @@ def circuit_backward(gates, features, history, angles, adjoint, nparameters):
 
 
 def frame_gates(nqubits, qubits, inverse=False):
-    # A(c)=Rz(s_phi phi+b_phi) Ry(s_theta theta+b_theta).
+    # R(c)=Rz(s_phi phi+b_phi) Ry(s_theta theta+b_theta).
     theta = ((0, 1, 1.), (1, 0, 1.))
     phi = ((2, 2, 1.), (3, 0, 1.))
     if inverse:
@@ -176,16 +176,28 @@ def metrics(y, prediction):
             "n": int(len(y))}
 
 
-class JointExchangeModel:
-    """One transformed fresh copy, one exchange, and both output-port readouts."""
-    nparameters = 25
+W_WORDS = ("YI", "ZI", "IY", "IZ", "XX", "ZZ", "XI", "IX") * 2   # 16 angles (default QFiLM)
+# Smaller W for the size ablation, called as joint_exchange_w<k>. Every set contains ZI,
+# so every size contains the exact solution (ZI angle pi/2, eta = pi/4, chi = 0).
+W_VARIANTS = {1: ("ZI",), 2: ("YI", "ZI"), 4: ("YI", "ZI", "XX", "ZZ"), 8: W_WORDS[:8], 16: W_WORDS}
 
-    def __init__(self, commutator=True):
+
+class JointExchangeModel:
+    """One transformed fresh copy, one exchange, and both output-port readouts.
+
+    Parameters: 4 frame | k angles of W (one per word) | eta, chi | 3 head.
+    k = 16 by default (25 parameters); see W_VARIANTS for k = 1, 2, 4, 8.
+    """
+
+    def __init__(self, commutator=True, words=W_WORDS, name=None):
         self.commutator = commutator
-        self.name = "joint_exchange" if commutator else "no_commutator"
-        words = ("YI", "ZI", "IY", "IZ", "XX", "ZZ", "XI", "IX") * 2
+        self.name = name or ("joint_exchange" if commutator else "no_commutator")
+        self.words = tuple(words)
+        k = len(self.words)
+        self.eta_index, self.chi_index, self.head_start = 4 + k, 5 + k, 6 + k
+        self.nparameters = 9 + k
         self.gates = (frame_gates(2, [0], inverse=True) +
-                      [pauli_gate(word, ((4 + i, 0, 1.),)) for i, word in enumerate(words)] +
+                      [pauli_gate(word, ((4 + i, 0, 1.),)) for i, word in enumerate(self.words)] +
                       frame_gates(2, [0], inverse=False))
 
     def initial_parameters(self, seed, label_mean=0.):
@@ -193,23 +205,24 @@ class JointExchangeModel:
         p = np.zeros(self.nparameters)
         p[:4] = [1 + rng.normal(0, .12), rng.normal(0, .18),
                  1 + rng.normal(0, .12), rng.normal(0, .18)]
-        p[4:20] = rng.normal(0, .45, 16)
-        p[20] = rng.uniform(.35, 1.15)
-        p[21] = rng.uniform(.15, .65)
-        p[22:24] = [-.5, .5] + rng.normal(0, .1, 2)
-        p[24] = label_mean
+        e, c, h = self.eta_index, self.chi_index, self.head_start
+        p[4:e] = rng.normal(0, .45, len(self.words))
+        p[e] = rng.uniform(.35, 1.15)
+        p[c] = rng.uniform(.15, .65)
+        p[h:h + 2] = [-.5, .5] + rng.normal(0, .1, 2)
+        p[h + 2] = label_mean
         return p
 
     def bounds(self):
         return ([(.4, 1.6), (-np.pi, np.pi), (.4, 1.6), (-np.pi, np.pi)] +
-                [(-np.pi, np.pi)] * 16 +
+                [(-np.pi, np.pi)] * len(self.words) +
                 [(.08, np.pi / 2 - .08), (-np.pi / 2, np.pi / 2)] +
                 [(-8., 8.), (-8., 8.), (-2., 2.)])
 
     def _forward(self, parameters, batch, keep_states=False):
         tau, history, angles = circuit_forward(self.gates, parameters,
                                                batch.features, batch.rho, keep_states)
-        eta, chi = parameters[20:22]
+        eta, chi = parameters[self.eta_index], parameters[self.chi_index]
         a = np.cos(eta) ** 2
         b = .5 * np.sin(2 * eta) * np.cos(chi) if self.commutator else 0.
         m = expectation(batch.P, batch.rho)
@@ -219,7 +232,8 @@ class JointExchangeModel:
         z_a = a * m + (1 - a) * t + b * kappa
         z_b = (1 - a) * m + a * t - b * kappa
         heads = np.column_stack((z_a, z_b))
-        prediction = heads @ parameters[22:24] + parameters[24]
+        h = self.head_start
+        prediction = heads @ parameters[h:h + 2] + parameters[h + 2]
         raw = {"prediction": prediction, "heads": heads, "correlation": m * t,
                "source_mean": m, "transformed_mean": t,
                "commutator_readout": kappa}
@@ -236,27 +250,28 @@ class JointExchangeModel:
         tau, history, angles, m, t, kappa, a, b = cache
         error = raw["prediction"] - batch.y
         delta = 2 * error / len(error)
-        u, v = parameters[22:24]
+        e, c, h = self.eta_index, self.chi_index, self.head_start
+        u, v = parameters[h:h + 2]
         commutator_observable = 1j * (batch.P @ batch.rho - batch.rho @ batch.P)
         adjoint = delta[:, None, None] * (
             (u * (1 - a) + v * a) * batch.P + b * (u - v) * commutator_observable)
         gradient = circuit_backward(self.gates, batch.features, history, angles,
                                     adjoint, self.nparameters)
-        eta, chi = parameters[20:22]
+        eta, chi = parameters[e], parameters[c]
         derivative_eta = np.sin(2 * eta) * (t - m)
         if self.commutator:
             derivative_eta += np.cos(2 * eta) * np.cos(chi) * kappa
-            gradient[21] = np.dot(delta * (u - v),
-                                   -.5 * np.sin(2 * eta) * np.sin(chi) * kappa)
-        gradient[20] = np.dot(delta * (u - v), derivative_eta)
-        gradient[22:24] = raw["heads"].T @ delta
-        gradient[24] = np.sum(delta)
+            gradient[c] = np.dot(delta * (u - v),
+                                  -.5 * np.sin(2 * eta) * np.sin(chi) * kappa)
+        gradient[e] = np.dot(delta * (u - v), derivative_eta)
+        gradient[h:h + 2] = raw["heads"].T @ delta
+        gradient[h + 2] = np.sum(delta)
         return float(np.mean(error ** 2)), gradient
 
     def describe(self, parameters=None):
         description = {
             "name": self.name, "trainable_parameters": self.nparameters,
-            "inactive_parameters": [] if self.commutator else [21],
+            "inactive_parameters": [] if self.commutator else [self.chi_index],
             "active_parameters": self.nparameters if self.commutator else self.nparameters - 1,
             "input_qubits": 2, "simultaneous_input_copies": 2,
             "output_heads": "P(c) on both output registers; same execution",
@@ -268,8 +283,8 @@ class JointExchangeModel:
                                      "a=cos(eta)^2; b=0 (equal mixture of opposite exchange signs)",
             "chi_realization": "classical random choice of exchange sign, no postselection",
             "primitive_gates_per_pair": {
-                "one_qubit_parameterized_rotations_before_readout": 16,
-                "two_qubit_Pauli_rotations_before_readout": 4,
+                "one_qubit_parameterized_rotations_before_readout": 4 + sum("I" in w for w in self.words),
+                "two_qubit_Pauli_rotations_before_readout": sum("I" not in w for w in self.words),
                 "global_two_register_partial_swap": 1,
                 "one_qubit_rotations_for_both_P_readouts": 4},
             "global_partial_swap_exact_ancilla_construction": {
@@ -281,12 +296,13 @@ class JointExchangeModel:
             "training": "exact density matrix, analytic gradients, full-batch L-BFGS-B",
             "identifiability": "a,b and affine-head scale are not separately physical estimates"}
         if parameters is not None:
-            eta, chi = parameters[20:22]
+            eta, chi = parameters[self.eta_index], parameters[self.chi_index]
+            h = self.head_start
             description["fitted_summary"] = {
                 "eta": float(eta), "chi": float(chi),
                 "a": float(np.cos(eta) ** 2),
                 "b": float(.5 * np.sin(2 * eta) * np.cos(chi)) if self.commutator else 0.,
-                "head_weights": parameters[22:24].tolist(), "head_bias": float(parameters[24]),
+                "head_weights": parameters[h:h + 2].tolist(), "head_bias": float(parameters[h + 2]),
                 "frame_parameters": parameters[:4].tolist()}
         return description
 
@@ -475,6 +491,8 @@ def make_model(name):
         return JointExchangeModel(True)
     if name == "no_commutator":
         return JointExchangeModel(False)
+    if name.startswith("joint_exchange_w") and name[16:].isdigit() and int(name[16:]) in W_VARIANTS:
+        return JointExchangeModel(True, W_VARIANTS[int(name[16:])], name)
     if name == "two_copy_qnn":
         return TwoCopyQNN()
     if name == "exchange_matched_qnn":

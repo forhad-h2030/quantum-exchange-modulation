@@ -25,7 +25,7 @@ import pennylane as qml
 import torch
 from torch import nn
 
-from .quantum_models import make_model as make_numpy_model
+from .quantum_models import JointExchangeModel, make_model as make_numpy_model
 
 
 @lru_cache(maxsize=8)
@@ -195,7 +195,7 @@ class TorchQuantumModel(nn.Module):
         self.name = name
         self._reference = make_numpy_model(name)
         self.nparameters = self._reference.nparameters
-        self.head_start = 22 if name in ("joint_exchange", "no_commutator") else self._reference.head_start
+        self.head_start = self._reference.head_start
         self.exchange_implementation = exchange_implementation
         if initial_parameters is None:
             initial_parameters = self._reference.initial_parameters(seed, label_mean)
@@ -203,7 +203,7 @@ class TorchQuantumModel(nn.Module):
         if initial_parameters.shape != (self.nparameters,):
             raise ValueError(f"Expected {self.nparameters} parameters, got {tuple(initial_parameters.shape)}")
         self.parameters_vector = nn.Parameter(initial_parameters)
-        is_exchange_family = name in ("joint_exchange", "no_commutator")
+        is_exchange_family = isinstance(self._reference, JointExchangeModel)
         gate_qubits = 2 if is_exchange_family else 4
         self._specifications = tuple(_decode_gate(gate, gate_qubits) for gate in self._reference.gates)
         self._is_exchange_family = is_exchange_family
@@ -226,7 +226,7 @@ class TorchQuantumModel(nn.Module):
                     angle = _linked_angle(parameters, angles, links)
                     _pauli_rotation(angle, payload, gate_wires)
             if is_exchange_family:
-                global_exchange(exchange_sign * parameters[20], range(4), self.exchange_implementation, 8 if extra_control else None)
+                global_exchange(exchange_sign * parameters[self._reference.eta_index], range(4), self.exchange_implementation, 8 if extra_control else None)
             for wire in (0, 2):
                 qml.RZ(-angles[..., 1], wires=wire)
                 qml.RY(-angles[..., 0], wires=wire)
@@ -259,7 +259,7 @@ class TorchQuantumModel(nn.Module):
         positive = torch.stack(self.qnode(purification, angles, parameters, 1.0), dim=-1)
         if self._is_exchange_family:
             negative = torch.stack(self.qnode(purification, angles, parameters, -1.0), dim=-1)
-            probability = 0.5 if self.name == "no_commutator" else torch.cos(parameters[21] / 2) ** 2
+            probability = 0.5 if self.name == "no_commutator" else torch.cos(parameters[self._reference.chi_index] / 2) ** 2
             values = probability * positive + (1 - probability) * negative
         else:
             values = positive
