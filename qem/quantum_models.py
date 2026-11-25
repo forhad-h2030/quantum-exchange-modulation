@@ -179,14 +179,14 @@ def metrics(y, prediction):
 W_WORDS = ("YI", "ZI", "IY", "IZ", "XX", "ZZ", "XI", "IX") * 2   # 16 angles (default QFiLM)
 # Smaller W for the size ablation, called as joint_exchange_w<k>. Every set contains ZI,
 # so every size contains the exact solution (ZI angle pi/2, eta = pi/4, chi = 0).
-W_VARIANTS = {1: ("ZI",), 2: ("YI", "ZI"), 4: ("YI", "ZI", "XX", "ZZ"), 8: W_WORDS[:8], 16: W_WORDS}
+W_VARIANTS = {1: ("ZI",), 2: ("YI", "ZI"), 4: ("YI", "ZI", "XX", "ZZ"), 8: W_WORDS[:8], 12: W_WORDS[:12], 16: W_WORDS}
 
 
 class JointExchangeModel:
     """One transformed fresh copy, one exchange, and both output-port readouts.
 
     Parameters: 4 frame | k angles of W (one per word) | eta, chi | 3 head.
-    k = 16 by default (25 parameters); see W_VARIANTS for k = 1, 2, 4, 8.
+    k = 16 by default (25 parameters); see W_VARIANTS for k = 1, 2, 4, 8, 12.
     """
 
     def __init__(self, commutator=True, words=W_WORDS, name=None):

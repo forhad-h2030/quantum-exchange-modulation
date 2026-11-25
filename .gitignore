@@ -13,3 +13,35 @@ __pycache__/
 *.key
 deployment-local.json
 paper/qip/quantum_exchange_modulation_paper.pdf
+
+# LaTeX: the manuscript source is not part of this repository
+*.tex
+*.cls
+*.bib
+*.bst
+*.sty
+*.aux
+*.bbl
+*.blg
+*.out
+*.synctex.gz
+
+# PDF and PNG files: only the images shown by README.md and the docs site are kept
+*.pdf
+*.png
+!results/figures/noisy_bell_n64.png
+!results/figures/noisy_direction_map_n64.png
+!results/noise_study/learning_curve_F0.95sd_clean_r0.025_off0.012.png
+!docs/assets/**/*.png
+
+# paper/qip: only the README's overview figure is published
+paper/qip/*
+!paper/qip/fig_overview.png
+
+# outputs of the README and paper commands (regenerated from fixed seeds)
+data/noise_study/
+results/noise_study/*
+!results/noise_study/learning_curve_F0.95sd_clean_r0.025_off0.012.png
+results/noisy_direction_map/
+results/paper_qip/
+results/figures/*.json
