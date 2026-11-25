@@ -40,9 +40,9 @@ Models trained under realistic noise with 64 states; none saw a Bell state in tr
 | QFiLM, 2 rotations | 2.5e-4 | 1.8e-3 (0.018) |
 | Classical FiLM | 0.057 | 0.058 (0.60) |
 
-QFiLM follows (2t − 1)²; classical FiLM misses it. The trained head scales its output by about 1.10 and adds 0.011, which approximately compensates for the average effect of the input noise (mean depolarization and readout offset); it cannot undo each random noise realization. On noise-free Bell inputs, which do not occur in a real experiment, the same correction overshoots by 10% at t = 0 and 1 (MSE 3.0e-3): the model is calibrated for the noise level of its training data. The paper's Fig. 9 shows the same test with the 400-state models.
+QFiLM follows (2t − 1)²; classical FiLM misses it. The fitted response (scale about 1.10, offset 0.011) approximately compensates for average input-noise effects. Applied to clean Bell inputs, this correction produces about 10% overshoot at the endpoints, illustrating sensitivity to a change in noise conditions. The paper's Fig. 9 shows the same test with the 400-state models.
 
-**Does the exchange matter?** The two-copy QNN gets the same two copies, context frame, readout and head as QFiLM, but a generic circuit (CNOT layers, 31 parameters) instead of the partial exchange. Both start from comparable random parameters.
+**Comparison with a generic two-copy QNN.** The two-copy QNN gets the same two copies, context frame, readout and head as QFiLM, but a generic circuit (CNOT layers, 31 parameters) instead of the partial exchange. Both start from comparable random parameters.
 
 | Test MSE / Var(y), 10,000 shots | 8 states | 64 states | 256 states |
 |---|---|---|---|
@@ -56,7 +56,17 @@ The median QNN error is 13, 20 and 18.5 times the median QFiLM-16 error at 8, 64
 
 ## Start here
 
-Set up the environment as in [docs/install.md](docs/install.md) (Python 3.12, Torch 2.14.1, PennyLane 0.45.1). Every result comes from `scripts/noise_study.py`; finished seeds are skipped, so any command can be rerun. Times are for a laptop CPU.
+Install (Python 3.12; versions pinned in `requirements.txt`: Torch 2.14.1, PennyLane 0.45.1, NumPy, SciPy, Matplotlib; CPU only):
+
+```bash
+python3.12 -m venv .venv && source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install torch==2.14.1 --index-url https://download.pytorch.org/whl/cpu   # Linux; on macOS skip this line
+python -m pip install -r requirements.txt
+python -m pip install -e . --no-deps
+```
+
+The main training workflow uses `scripts/noise_study.py` (finished seeds are skipped, so its commands can be rerun); additional scripts generate the evaluation figures. Times are for a laptop CPU.
 
 **1. Noise-study table** (all 8 noise settings, 64 training states, about 45 min)
 
@@ -187,4 +197,4 @@ python scripts/paper_qip_figures.py
 | Fig. 7 (finite shots) | `paper_qip_finite_shot.py` | 16- and 256-state runs (block 2) |
 | Fig. 8 (readout bit flips) | `paper_qip_readout_flip.py` | 64-state run (block 2) |
 
-All quoted numbers are written to `results/paper_qip/numbers.json`, `finite_shot.json`, `readout_flip.json`, the learning-curve JSON and the direction-map `summary.json`. The earlier noise-free study is not used in the paper; it is documented in [docs/reproduction.md](docs/reproduction.md), and two scripts keep it behind `--clean` (`paper_qip_finite_shot.py`, `paper_qip_readout_flip.py`).
+All quoted numbers are written to `results/paper_qip/numbers.json`, `finite_shot.json`, `readout_flip.json`, the learning-curve JSON and the direction-map `summary.json`. The earlier noise-free study is not used in the paper; its code and results are in the tag `legacy-release-2026`.
