@@ -37,8 +37,8 @@ Models trained under realistic noise with 64 states; none saw a Bell state in tr
 | Bell test, 64 states | Mean curve, MSE | One prediction, MSE (relative to Var = 0.096) |
 |---|---|---|
 | QFiLM, 16 rotations | 2.4e-4 | 1.8e-3 (0.019) |
-| QFiLM, 2 rotations | 2.5e-4 | 1.8e-3 (0.018) |
-| Classical FiLM | 0.057 | 0.058 (0.60) |
+| QFiLM, 2 rotations | 2.5e-4 | 1.7e-3 (0.018) |
+| Classical FiLM | 0.057 | 0.072 (0.75) |
 
 QFiLM follows (2t − 1)²; classical FiLM misses it. The fitted response (scale about 1.10, offset 0.011) approximately compensates for average input-noise effects. Applied to clean Bell inputs, this correction produces about 10% overshoot at the endpoints, illustrating sensitivity to a change in noise conditions. The paper's Fig. 9 shows the same test with the 400-state models.
 

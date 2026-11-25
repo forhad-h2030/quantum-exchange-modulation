@@ -60,7 +60,7 @@ def film_models(d):
 
 
 def evaluate(data_path, quantum, film_dir, repeats, copies, rng):
-    """{label: (mean curve, band s.d., per-seed means)} on noisy Bell inputs, plus the clean-input check."""
+    """{label: (mean curve, band s.d., per-seed means, all predictions (seeds, repeats, t))}, plus the clean-input check."""
     d = np.load(data_path)
     t, rho, ctx, ang = d['bell_t'], d['bell_rho'], d['bell_context'], d['bell_angles']
     models = {lab: [(TorchQuantumModel(key, initial_parameters=w), w) for _, w in sorted(ws.items())]
@@ -80,7 +80,7 @@ def evaluate(data_path, quantum, film_dir, repeats, copies, rng):
     out = {}
     for lab, r in reps.items():
         r = np.array(r)                                                  # (seeds, repeats, t)
-        out[lab] = (r.mean((0, 1)), r.std(1, ddof=1).mean(0), r.mean(1))
+        out[lab] = (r.mean((0, 1)), np.sqrt(r.var(1, ddof=1).mean(0)), r.mean(1), r)  # band: root mean within-model variance
     clean = {lab: float(np.mean([np.mean((qfilm_shots(m, w, rho, ang, 0, rng) - (2 * t - 1) ** 2) ** 2)
                                  for m, w in ms])) for lab, ms in models.items()}
     return t, out, clean
@@ -96,7 +96,7 @@ def plot(t, curves, colors, title, paths, figsize):
     exact = (2 * t - 1) ** 2
     fig, ax = plt.subplots(figsize=figsize)
     ax.plot(t, exact, color=INK, lw=1.2, ls='--', label=r'exact $(2t-1)^2$', zorder=5)
-    for lab, (mean, sd, _) in curves.items():
+    for lab, (mean, sd, *_) in curves.items():
         ax.fill_between(t, mean - sd, mean + sd, color=colors[lab], alpha=0.18, lw=0, zorder=2)
         ax.plot(t, mean, color=colors[lab], lw=2, label=lab, zorder=3)
     ax.set_title(title, fontsize=9)
@@ -142,8 +142,7 @@ def main():
     summary = {'train_states': n, 'scenario': SCENARIO, 'repeats': a.repeats, 'copies': a.copies,
                'var_exact': float(exact.var()),
                'mse_of_mean_curve': {lab: float(np.mean((c[0] - exact) ** 2)) for lab, c in curves.items()},
-               'mse_single_prediction': {lab: float(np.mean(c[1] ** 2) + np.mean((c[0] - exact) ** 2))
-                                         for lab, c in curves.items()},
+               'mse_single_prediction': {lab: float(np.mean((c[3] - exact) ** 2)) for lab, c in curves.items()},
                'mean_band_sd': {lab: float(c[1].mean()) for lab, c in curves.items()},
                'clean_input_mse_exact_readout': clean,
                'seeds': {lab: len(c[2]) for lab, c in curves.items()}}

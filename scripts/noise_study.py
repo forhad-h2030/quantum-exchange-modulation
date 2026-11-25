@@ -78,12 +78,30 @@ def paths(n):
 
 
 # ---------------------------------------------------------------- step 1: data
+def config_mismatch(manifest_path, cfg):
+    """Settings in cfg that differ from the saved manifest ('' if they all match)."""
+    m = json.loads(manifest_path.read_text())
+    saved = {'p_prep': m['preparation_noise']['p_prep'], 'p_sd': m['preparation_noise']['p_sd'],
+             'delta': m['preparation_noise']['delta'], 'delta_sd': m['preparation_noise']['delta_sd'],
+             'readout_sigma': m['readout_noise']['sigma'], 'readout_offset_sd': m['readout_noise']['offset_sd'],
+             'target_state': m['target_state'], 'two_sided': m['context_holdout'].startswith('two-sided')}
+    want = {'p_prep': 0.0, 'p_sd': 0.0, 'delta': 0.0, 'delta_sd': 0.0, 'readout_sigma': 0.0,
+            'readout_offset_sd': 0.0, 'target_state': 'prepared', 'two_sided': False, **cfg}
+    bad = [f'{k}: saved {saved[k]}, requested {v}' for k, v in want.items() if k in saved and
+           (saved[k] != v if isinstance(v, (str, bool)) else not np.isclose(saved[k], v, rtol=1e-5, atol=1e-7))]
+    return '; '.join(bad)
+
+
 def step_data(scenarios, n):
     from qem.scaled_data import make_scaled_benchmark
     ddir, _ = paths(n)
     for name, cfg in scenarios.items():
         dst = ddir / f'{name}.npz'
         if dst.exists():
+            bad = config_mismatch(dst.with_suffix('.json'), cfg)
+            if bad:
+                sys.exit(f'data   {name}: existing {dst.relative_to(ROOT)} was made with different settings ({bad}); '
+                         f'use a new name, or delete it and results/noise_study/n{n}/*/{name}')
             print(f'data   {name}: exists')
             continue
         m = make_scaled_benchmark(dst, n, fixed_eval=True, **cfg)

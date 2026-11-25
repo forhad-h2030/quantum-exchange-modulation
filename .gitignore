@@ -45,3 +45,16 @@ results/noise_study/*
 results/noisy_direction_map/
 results/paper_qip/
 results/figures/*.json
+
+# no data or result files on GitHub; the README and paper commands regenerate them.
+# Only the README images under results/ are published.
+data/
+verification/
+*.npz
+*.pt
+results/*
+!results/figures/
+results/figures/*
+!results/figures/noisy_bell_n64.png
+!results/figures/noisy_direction_map_n64.png
+!results/noise_study/
