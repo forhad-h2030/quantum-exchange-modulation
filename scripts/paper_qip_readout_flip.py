@@ -5,6 +5,8 @@ A flip scales a one-bit mean by 1-2e and a two-bit correlator by (1-2e)^2.
   raw         estimates as measured
   corrected   divided by the known attenuation
   unbiased    (Gram-6) corrected, with unbiased squared estimates
+Also: the analytic circuit with its fitted head (results/baselines/n64 from scripts/baseline_study.py) and the
+direction-specific transverse-6 estimator (qem/local_estimators.py; unbiased squares, raw or corrected).
 3 seeds, 50 shot batches. Default: realistic noise, 64 training states (scripts/noise_study.py runs);
 --clean: the earlier noise-free study at 16 training states.
 
@@ -24,6 +26,8 @@ sys.path.insert(0, str(ROOT / 'scripts'))
 sys.path.insert(0, str(ROOT))
 from paper_qip_finite_shot import (BUDGETS, CLEAN, OUTCOMES, SPLIT, data_path, film_models,  # noqa: E402
                                    film_predict, gram_fit, quantum_models, stats)
+from qem import gate_noise as gn  # noqa: E402
+from qem import local_estimators as le  # noqa: E402
 from qem.data import pauli_features  # noqa: E402
 
 N_TRAIN = 16 if CLEAN else 64
@@ -115,17 +119,32 @@ def main():
     r16 = pauli_features(rho)
     q, fm, coef = quantum_models(N_TRAIN), film_models(N_TRAIN), gram_fit(data)
     gram = lambda G: np.column_stack([gram_features_from_G(G, ctx), np.ones(len(G))]) @ coef
+    # analytic circuit with head fitted on the exact (ideal-gate) training expectations
+    an = np.load(ROOT / f'results/baselines/n{N_TRAIN}/analytic_expectations.npz')
+    ah, ac = an['0__test_joint__heads'], an['0__test_joint__corr']
+    aw, ab = gn.fit_head(an['0__train__heads'], data['train_y'])
+    # transverse-6: affine calibration on exact transverse values of the training inputs
+    tX = np.column_stack([le.transverse_exact(pauli_features(data['train_rho']), data['train_context']),
+                          np.ones(len(data['train_y']))])
+    tcoef, *_ = np.linalg.lstsq(tX, data['train_y'], rcond=None)
 
     rows = []
     for e in FLIP_RATES:
         for B in BUDGETS:
             shots_q, shots_t = B // 2, B // 9
             acc = {k: [] for k in ['exchange_raw', 'exchange_corrected', 'film_raw', 'film_corrected',
-                                   'gram6_raw', 'gram6_corrected', 'gram6_corrected_unbiased']}
+                                   'gram6_raw', 'gram6_corrected', 'gram6_corrected_unbiased',
+                                   'analytic_raw', 'analytic_corrected', 'transverse6_raw', 'transverse6_corrected']}
             for _ in range(REPS):
                 for s, (h, c, w, b) in q.items():
                     acc['exchange_raw'].append(np.mean((quantum_predict(rng, h, c, w, b, shots_q, e, False) - y) ** 2))
                     acc['exchange_corrected'].append(np.mean((quantum_predict(rng, h, c, w, b, shots_q, e, True) - y) ** 2))
+                for cor_, key in ((False, 'analytic_raw'), (True, 'analytic_corrected')):
+                    acc[key].append(np.mean((quantum_predict(rng, ah, ac, aw, ab, shots_q, e, cor_) - y) ** 2))
+                fr = 1 - 2 * e
+                for cor_, key in ((False, 'transverse6_raw'), (True, 'transverse6_corrected')):
+                    t = le.transverse_estimate(rng, r16, ctx, B // 6, fA=fr, fB=np.array([1, fr, fr, fr]), correct=cor_)
+                    acc[key].append(np.mean((tcoef[0] * t + tcoef[1] - y) ** 2))
                 raw, n_out = tomography(rng, r16, shots_t, e)
                 cor = raw / attenuation(e)
                 for s, model in fm.items():
@@ -150,19 +169,20 @@ def main():
 
 def plot(report):
     import matplotlib.pyplot as plt
-    from paper_qip_figures import CLASSICAL, GRAM, INK, MUTED, QUANTUM, style  # noqa: E402
+    from paper_qip_figures import GRAM, INK, MUTED, QUANTUM, style  # noqa: E402
+    TRANS = '#7A3E9D'
     v, rows = report['var_y'], report['rows']
     get = lambda e, key: np.array([[r['copies'], r[key]['mean'] / v] for r in rows if r['flip_rate'] == e])
     fig, axes = plt.subplots(1, 2, figsize=(7.2, 3.1), gridspec_kw={'width_ratios': [1.35, 1]})
 
     ax = axes[0]
     e_show = 0.02
-    for key, color, label in [('exchange', QUANTUM, 'QFiLM'), ('film', CLASSICAL, 'classical FiLM'),
-                              ('gram6', GRAM, 'Gram-6')]:
+    for key, color, label in [('exchange', QUANTUM, 'QFiLM'), ('gram6', GRAM, 'Gram-6'),
+                              ('transverse6', TRANS, 'transverse-6')]:
         corrected = 'gram6_corrected_unbiased' if key == 'gram6' else f'{key}_corrected'
         raw = get(e_show, f'{key}_raw')
         cor = get(e_show, corrected)
-        tag = 'corrected, unbiased squares' if key == 'gram6' else 'corrected'
+        tag = 'corrected'
         ax.plot(cor[:, 0], cor[:, 1], '-', color=color, lw=1.6, marker='o', ms=3, label=f'{label}, {tag}')
         ax.plot(raw[:, 0], raw[:, 1], '--', color=color, lw=1.3, label=f'{label}, raw')
     ideal = get(0.0, 'exchange_raw')
@@ -173,12 +193,12 @@ def plot(report):
     ax.set_ylabel('Relative joint-test MSE')
     ax.set_title(f'(a) readout flip rate $e={e_show:.0%}$'.replace('%', r'\%'), loc='left', color=INK)
     style(ax)
-    ax.legend(frameon=False, fontsize=6.6, loc='lower left', ncol=1)
+    ax.legend(frameon=False, fontsize=6.6, loc='upper right', ncol=1)
 
     ax = axes[1]
     B_show = 18000
     rates = np.array(report['flip_rates'])
-    for key, color, label in [('exchange', QUANTUM, 'QFiLM'), ('film', CLASSICAL, 'FiLM'), ('gram6', GRAM, 'Gram-6')]:
+    for key, color, label in [('exchange', QUANTUM, 'QFiLM'), ('gram6', GRAM, 'Gram-6'), ('transverse6', TRANS, 'transverse-6')]:
         corrected = 'gram6_corrected_unbiased' if key == 'gram6' else f'{key}_corrected'
         for k, ls, mk in [(f'{key}_raw', '--', None), (corrected, '-', 'o')]:
             vals = [next(r[k]['mean'] for r in rows if r['flip_rate'] == e and r['copies'] == B_show) / v for e in rates]

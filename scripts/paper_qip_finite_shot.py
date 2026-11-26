@@ -9,7 +9,8 @@ Default: realistic noise (drift + readout + offset, intended label), models from
 at 16 and 256 training states; test inputs are the noisy reconstructed states rho_hat.
 --clean: the earlier noise-free study (data/scaled_fixed, 16 and 400 states).
 
-Output: results/paper_qip/finite_shot[_clean].json, paper/qip/fig_shots.pdf
+Output: results/paper_qip/finite_shot[_clean].json, results/paper_qip/fig_shots_n16_n256.pdf (earlier version of paper
+Fig. 6, 16 and 256 training states; the paper figure is now made by scripts/baseline_study.py)
 """
 from __future__ import annotations
 
@@ -211,7 +212,7 @@ def plot(report):
     ax.legend(frameon=False, fontsize=7.5, loc='lower left')
     ax.tick_params(colors=INK)
     fig.tight_layout()
-    fig.savefig(ROOT / 'paper/qip/fig_shots.pdf')
+    fig.savefig(ROOT / 'results/paper_qip/fig_shots_n16_n256.pdf')
     fig.savefig(ROOT / f"results/paper_qip/fig_shots{'_clean' if CLEAN else ''}.png", dpi=150)
 
 

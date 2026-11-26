@@ -240,7 +240,7 @@ CURVE_JSON = ROOT / 'results/noise_study/learning_curve_F0.95sd_clean_r0.025_off
 
 
 def noisy_curve(numbers):
-    """Table 1 and Fig. 4 from the realistic-noise learning curve of scripts/noise_study.py."""
+    """Table 1 and Fig. 3 from the realistic-noise learning curve of scripts/noise_study.py."""
     rec = next(iter(json.loads(CURVE_JSON.read_text()).values()))
     numbers['learning_curve_noisy'] = rec
     cols = [('qfilm16', 'QFiLM, 16'), ('qfilm2', 'QFiLM, 2'), ('qnn', 'Two-copy QNN'), ('film', 'Classical FiLM'),

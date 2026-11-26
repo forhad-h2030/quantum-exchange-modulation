@@ -31,6 +31,7 @@ paper/qip/quantum_exchange_modulation_paper.pdf
 *.png
 !results/figures/noisy_bell_n64.png
 !results/figures/noisy_direction_map_n64.png
+!results/figures/baselines_copies_n64.png
 !results/noise_study/learning_curve_F0.95sd_clean_r0.025_off0.012.png
 !docs/assets/**/*.png
 
@@ -55,6 +56,7 @@ verification/
 results/*
 !results/figures/
 results/figures/*
+!results/figures/baselines_copies_n64.png
 !results/figures/noisy_bell_n64.png
 !results/figures/noisy_direction_map_n64.png
 !results/noise_study/

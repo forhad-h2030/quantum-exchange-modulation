@@ -54,6 +54,22 @@ QFiLM follows (2t − 1)²; classical FiLM misses it. The fitted response (scale
 
 The median QNN error is 13, 20 and 18.5 times the median QFiLM-16 error at 8, 64 and 256 states. Its exact and 10,000-shot errors are nearly equal, so shot noise is not the cause: this generic circuit did not learn the response. The QNN differs from QFiLM in more than the exchange (no context-controlled source rotation, different gates, more parameters), so this compares two trained architectures rather than isolating the exchange. Tested with 3 seeds and up to 256 states.
 
+**Analytic and local-measurement baselines.** The response is known analytically, so QFiLM is also compared with estimators that use this knowledge: the analytic two-copy circuit (V = exp(−iπP/4), η = π/4, χ = 0), with its fixed output ⟨Z_B1⟩ − ⟨Z_A1⟩ or a fitted 3-parameter head; Gram-6 from 9-basis tomography, with naive or unbiased squared estimates; and transverse-6, which measures only the 6 local settings needed for one direction (D_n = ½ Σ_b (r_ub² + r_vb²), u and v perpendicular to n). Same 64-state training set and 800 test pairs; each method gets the same number of state copies per prediction (`scripts/baseline_study.py`).
+
+![Error against state copies per prediction for QFiLM and the baselines](results/figures/baselines_copies_n64.png)
+
+| Test MSE / Var(y) | exact | 180 copies | 1,800 copies | 18,000 copies |
+|---|---|---|---|---|
+| QFiLM, 2 rotations (mean of 3 seeds) | 0.028 | 0.44 | 0.069 | 0.032 |
+| QFiLM, 16 rotations (mean of 3 seeds) | 0.031 | 0.44 | 0.073 | 0.035 |
+| Analytic circuit, fitted head | 0.028 | 0.39 | 0.065 | 0.032 |
+| Analytic circuit, fixed output | 0.082 | | | |
+| Gram-6, naive squares | 0.027 | 1.10 | 0.083 | 0.033 |
+| Gram-6, unbiased squares | 0.027 | 0.66 | 0.077 | 0.032 |
+| Transverse-6, unbiased squares | 0.028 | 0.39 | 0.058 | 0.031 |
+
+The trained circuit reaches the accuracy of the analytic circuit with a fitted head; almost all of the gain over the fixed output comes from the head's scale (about 1.10), which compensates for the average depolarization of the inputs. The two-copy circuits need fewer copies than 9-basis tomography while shot noise dominates, but not fewer than transverse-6. So QFiLM is a trainable physical parameterization of the response, not a learning or measurement advantage. Under depolarizing gate errors in the compiled circuit (32 CNOTs with 2 rotations), refitting the head compensates for the bias at the price of more shots; at a two-qubit error of 10⁻³, a head calibrated from about 1,800 copies per training pair comes within about 15% of an exact refit (paper Fig. 8).
+
 ## Start here
 
 Install (Python 3.12; versions pinned in `requirements.txt`: Torch 2.14.1, PennyLane 0.45.1, NumPy, SciPy, Matplotlib; CPU only):
@@ -126,7 +142,7 @@ All QFiLM models also use a context frame `F(c) = R_Z(a_phi) R_Y(a_theta)` on qu
 
 The paper uses `intended` labels; prepared-label versions are run with `--custom` (below). For each pair the model inputs are identical, only the label differs.
 
-Training and the noise-study table use exact expectation values; finite shots are added at prediction time in the result figures. Gates are ideal everywhere; detector bit flips appear only in `scripts/paper_qip_readout_flip.py` (paper Fig. 8).
+Training and the noise-study table use exact expectation values; finite shots are added at prediction time in the result figures. Gates are ideal except in `scripts/gate_noise_study.py` and `scripts/baseline_study.py` (paper Fig. 8: the trained circuits and the analytic circuit compiled to CNOTs with depolarizing gate errors, no retraining); detector bit flips appear only in `scripts/paper_qip_readout_flip.py` (paper Fig. 7).
 
 **Noise settings** (Table 4 of the paper; `F` is the fidelity of a pure input, `1 - 3p/4`):
 
@@ -179,8 +195,9 @@ python scripts/noise_study.py all --train-states 400 --models qfilm16,film --job
 python scripts/noise_study.py rotations --train-states 64 --scenarios F0.95sd_clean_r0.025_off0.012 \
   --rotations 1,2,8,12,16 --seeds 17,31,73,101,137,211,223,227,229,233,239,241,251,257,263,269,271,277,281,283 --jobs 6
 # figures and tables
-python scripts/paper_qip_finite_shot.py
-python scripts/paper_qip_readout_flip.py
+python scripts/gate_noise_study.py --jobs 4      # noisy expectations of the trained circuits
+python scripts/baseline_study.py --jobs 4        # Figs. 6 and 8: analytic circuit, unbiased Gram-6, transverse-6
+python scripts/paper_qip_readout_flip.py         # Fig. 7 (needs baseline_study.py output)
 python scripts/paper_qip_overview_panel.py
 python scripts/noisy_bell.py --paper
 python scripts/paper_qip_figures.py
@@ -189,12 +206,13 @@ python scripts/paper_qip_figures.py
 | In the paper | Made by | Needs |
 |---|---|---|
 | Fig. 1 (overview), panel (d) | `paper_qip_overview_panel.py` (data of panel d) | 64-state realistic run (block 2) |
-| Fig. 4 and Table 1 (error vs. training size) | `noise_study.py` (block 2), copied and tabulated by `paper_qip_figures.py` | block 2 |
+| Fig. 3 and Table 1 (error vs. training size) | `noise_study.py` (block 2), copied and tabulated by `paper_qip_figures.py` | block 2 |
 | Rotation-block numbers (Sec. 6.1) | `noise_study.py rotations` | 64-state data |
-| Fig. 5 (direction map) | `noisy_direction_map.py` (block 3), copied by `paper_qip_figures.py` | block 3 |
-| Table 2, Fig. 6 (noise scenarios) | `paper_qip_figures.py` | 400-state noise study |
+| Fig. 4 (direction map) | `noisy_direction_map.py` (block 3), copied by `paper_qip_figures.py` | block 3 |
+| Table 2, Fig. 5 (noise scenarios) | `paper_qip_figures.py` | 400-state noise study |
 | Fig. 9 (Bell family, noisy inputs) | `noisy_bell.py --paper` | 400-state noise study |
-| Fig. 7 (finite shots) | `paper_qip_finite_shot.py` | 16- and 256-state runs (block 2) |
-| Fig. 8 (readout bit flips) | `paper_qip_readout_flip.py` | 64-state run (block 2) |
+| Fig. 6 (copies per prediction: QFiLM, analytic circuit, Gram-6, transverse-6) | `baseline_study.py` (local estimators: `qem/local_estimators.py`) | 64-state runs (block 2) |
+| Fig. 7 (readout bit flips) | `paper_qip_readout_flip.py` | 64-state runs, `baseline_study.py` |
+| Fig. 8 (gate errors, head calibration) | `gate_noise_study.py`, then `baseline_study.py` (compiled circuits: `qem/gate_noise.py`) | 64-state runs (block 2) |
 
-All quoted numbers are written to `results/paper_qip/numbers.json`, `finite_shot.json`, `readout_flip.json`, the learning-curve JSON and the direction-map `summary.json`. The earlier noise-free study is not used in the paper; its code and results are in the tag `legacy-release-2026`.
+All quoted numbers are written to `results/paper_qip/numbers.json`, `readout_flip.json`, `results/baselines/n64/summary.json`, `results/gate_noise/n64/summary.json`, the learning-curve JSON and the direction-map `summary.json`. The earlier noise-free study is not used in the paper; its code and results are in the tag `legacy-release-2026`.

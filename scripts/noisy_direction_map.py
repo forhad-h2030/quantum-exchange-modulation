@@ -230,6 +230,8 @@ def main():
     cap = np.linspace(-np.arccos(0.55), np.arccos(0.55), 200)            # boundary n_x = 0.55
     cap_th = np.degrees(np.arcsin(np.clip(0.55 / np.cos(cap), -1, 1)))
     cap_ph, cap_th = np.degrees(np.r_[cap, cap[::-1]]), np.r_[cap_th, 180 - cap_th[::-1]]
+    mir_ph = wrap(cap_ph + 180)                                          # mirror cap n_x < -0.55: same axes
+    cut = np.r_[0, np.flatnonzero(np.abs(np.diff(mir_ph)) > 180) + 1, len(mir_ph)]
 
     fig = plt.figure(figsize=(10.4, 8.6))
     W, H, X0, DX = 0.235, 0.205, 0.07, 0.268
@@ -242,6 +244,8 @@ def main():
     def decorate(ax, row, col):
         ax.plot(cap_ph, cap_th, color=crim, lw=1.6, ls='--',   # white edge keeps it visible on red pixels
                 path_effects=[pe.Stroke(linewidth=2.8, foreground='white'), pe.Normal()])
+        for i0, i1 in zip(cut[:-1], cut[1:]):
+            ax.plot(mir_ph[i0:i1], cap_th[i0:i1], color='0.85', lw=1.3, ls=':')
         ax.scatter(tr_ph, tr_th, s=12, facecolor='none', edgecolor='white', lw=0.7, zorder=3)
         ax.set_xlim(-180, 180); ax.set_ylim(0, 180)
         ax.set_xticks([-180, -90, 0, 90, 180]); ax.set_yticks([0, 45, 90, 135, 180])
@@ -268,7 +272,7 @@ def main():
     cb = fig.colorbar(imd, cax=fig.add_axes([X0 + DX * 3 - 0.02, 0.43, 0.012, H]))
     cb.set_label('prediction $-$ exact')
     fig.text(X0, 0.60, f'One noise draw,\n{a.copies:,} copies\nper direction.\n\n'
-             'White circles:\ntraining directions.\n\nRed dashed:\nheld-out cap $n_x>0.55$\n(test directions\nlie inside).',
+             'White circles:\ntraining directions.\n\nRed dashed:\nheld-out cap $n_x>0.55$\n(test directions\nlie inside).\n\nGrey dotted: mirror\ncap $n_x<-0.55$, same\naxes, not held out.',
              fontsize=8.5, va='top')
     fig.text(0.005, 0.965, '(a)', fontsize=12, weight='bold')
 
@@ -278,6 +282,8 @@ def main():
     sel = lambda v: np.asarray(v)[:-1][o]  # noqa: E731
     ax = fig.add_axes([X0, 0.07, DX * 3 - 0.035, 0.24])
     ax.axvspan(-np.degrees(np.arccos(0.55)), np.degrees(np.arccos(0.55)), color=crim, alpha=0.08, lw=0)
+    for lo, hi in ((-180, -180 + np.degrees(np.arccos(0.55))), (180 - np.degrees(np.arccos(0.55)), 180)):
+        ax.axvspan(lo, hi, color='0.5', alpha=0.10, lw=0)
     ax.plot(x, sel(exact_e), color='k', lw=1.2, label=r'exact $D_P(\mathbf{n})$', zorder=5)
     ax.errorbar(x - 0.9, sel(q_dot), yerr=sel(q_bar), fmt='o', ms=3.4, color=blue, mfc='white', mew=0.9,
                 elinewidth=0.8, capsize=0, label=f'QFiLM, {k0} rotations', zorder=4)
@@ -293,7 +299,7 @@ def main():
     ax.set_xlabel(r'Azimuth $\varphi$ (degrees), equator $\theta=90^\circ$')
     ax.set_ylabel(r'$D_P(\mathbf{n})$')
     ax.legend(frameon=False, fontsize=8.5, loc='upper center', ncol=4, bbox_to_anchor=(0.5, 1.16))
-    ax.text(0.5, 0.04, 'shaded: held-out cap', transform=ax.transAxes, fontsize=8, color=crim, ha='center')
+    ax.text(0.5, 0.04, 'red: held-out cap; grey: mirror cap (same axes, not held out)', transform=ax.transAxes, fontsize=8, color=crim, ha='center')
     fig.text(0.005, 0.345, '(b)', fontsize=12, weight='bold')
 
     figs = ROOT / 'results/figures'
